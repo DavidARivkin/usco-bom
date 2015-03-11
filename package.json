@@ -1,0 +1,14 @@
+{
+  "name": "usco-bom",
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Mark 'kaosat-dev' Moissette",
+  "license": "MIT",
+  "dependencies": {
+    "babelify": "^5.0.4"
+  }
+}
