@@ -15,66 +15,62 @@ class BomEntry{
 
 class Bom {
   constructor(){
-    
     //TODO: ermmm bom within bom?
     this.bom = [];
   }
   
-  
   //basic api
-  registerPart( partData, implementations, instances ){
-    const entryDefaults = {
+  registerPart( partData, implementations={}, instances ){
+    const PARTDEFAULTS = {
       name:"",
       description:"",
       version:"0.0.0",
-      quantity:0,
-      physicalQuantity:0,//this can be used for weight, distance etc
-      unit:"EA",
+      qty:0,
+      physicalQty:0,//this can be used for weight, distance etc
+      unit:"EA",//this applies to the physicalQty field
       parameters:"",
-      implementations:{}
+      implementations:{},//without defaults to "default":"xxx.stl"
+      
+      //FIXME: hack field? shoud this be in another data structure ?
+      _instances:{}//same keys as implementations, values are in memory instances ie "meshes"
     };
-  
+    
+    let partData = Object.assign({}, PARTDEFAULTS, partData); 
   }
   
-   /* register a part mesh instance in the bom */
-  registerPartMeshInstance( mesh ){
-    var userData = mesh.userData;
-    var partId   = mesh.userData.part.id;//FIXME : partID VS partInstanceID
-    var instId   = "";
-    
-    if( !this.partMeshInstances[partId] )
-    {
-      this.partMeshInstances[partId] = [];
-    }
-    this.partMeshInstances[partId].push( mesh );
-    
-    if(this.partWaiters[ partId ])
-    {
-      console.log("resolving mesh for ", partId);
-      this.partWaiters[ partId ].resolve( mesh );
-    }
-    
-    //each instance needs a unique uid
-    //FIXME: this should not be at the MESH level, so this is the wrong place for that    
-    mesh.userData.part.instId = this.generateUUID();
-    
-    //FIXME: experimental hack , for a more data driven based approach
-    
-    var assemblyEntry = {
-      partId:partId,
-      instId:mesh.userData.part.instId, 
-      pos: mesh.position.toArray(), 
-      rot:mesh.rotation.toArray(), 
-      scale:mesh.scale.toArray()
+  
+  registerImplementationMesh( partData, implementationName, mesh ){
+    const PARTDEFAULTS = {
+      name:"",
+      description:"",
+      version:"0.0.0",
+      qty:0,
+      physicalQty:0,//this can be used for weight, distance etc
+      unit:"EA",//this applies to the physicalQty field
+      parameters:"",
+      implementations:{},//without defaults to "default":"xxx.stl"
+      
+       //FIXME: hack field? shoud this be in another data structure ?
+      _instances:{}//same keys as implementations, values are in memory instances ie "meshes"
     };
-    this.assembly.children.push( assemblyEntry );
+    
+    let partData = Object.assign({}, PARTDEFAULTS, partData); 
+    
+    
+    this.bom.push( partData );
+    return 
   }
   
-  /*add an instance */
+
+  /*
+    register an instance 
+  
+  */
   registerInstance( partId, instance )
   {
+    if(!instance) throw new Error("No instance given");
     var bomEntry = this.bom[ partId ];
-    if(!bomEntry) throw new Error("bad partId specified");
+    if(!bomEntry) throw new Error("Not existing partId specified");
     
     //console.log("registering", instance, "as instance of ", bomEntry.name ); 
     bomEntry._instances.push( instance);
@@ -82,8 +78,11 @@ class Bom {
     bomEntry.qty += 1;
   }
   
-  /*remove an instance */
+  /*remove an instance 
+  
+  */
   unRegisterInstance( partId, instance ){
+    if(!instance) throw new Error("No instance given");
     var bomEntry = this.bom[ partId ];
     if(!bomEntry) throw new Error("bad partId specified");
     
@@ -95,15 +94,26 @@ class Bom {
     bomEntry.qty -= 1;
   }
   
+ 
   /*
-    Register an IMPLEMENTATIOn in the bom: an implementation is for example a mesh/ mesh file
-    (stl , amf) etc: why an implementation ? because an entity/part can be created in different
-    software, different formats etc, it still remains the same entity*/
-  registerImplementationInFakeBOM( meshUri, partName ){
+    Register an IMPLEMENTATIOn in the bom: 
+    an implementation is a key-value pair : 
+      *key : the SOURCE (a parametric file used
+    to generate a mesh) 
+      *value: the concrete 
+      for example a mesh/ mesh file (stl , amf)
+    
+    why an implementation ? because an entity/part can be created in different
+    software, different formats etc, it still remains the same entity
+    
+    for example :
+      {"cad/case.scad":"cad/case-top-0.0.1.stl"}
+  */
+  registerImplementation( partName, meshUri  ){
     console.log("registering", meshUri, "as implementation of ", partName); 
     if(!partName) throw new Error("no part name specified");
     
-    var partIndex = -1;
+    /*var partIndex = -1;
     var bomEntry = null;
     
     for(var i=0;i<this.bom.length;i++)
@@ -115,8 +125,11 @@ class Bom {
         bomEntry = entry;
         break;
       }
-    }
+    }*/
+    let bomEntry = this.getPartByName( partName );
+    if(!bomEntry){
     
+    }
     
     if(!bomEntry){
       partIndex += 1; 
@@ -141,24 +154,38 @@ class Bom {
   
   
   //helpers and extras
-  isPartImplementationInBom( implementationName ){
-    for(var i=0;i<this.bom.length;i++)
-    {
-      var entry = this.bom[i];
-      var implemNames = Object.keys(entry.implementations).map(key => entry.implementations[key]); 
-      
-      if(implemNames.indexOf( implementationName ) !== -1)
-      {
-        return true;
-      }
-    }
-    return false;
+  
+  getPartByName( partName ){
+    var res = this.bom.find( entry => entry.name === partName );
+    if( matches.length > 0 ) return res[0]
+    return undefined;
   }
   
   /*retrieve all part names*/
   getPartNames(){
     var partNames = this.bom.map(obj => obj.name); //return obj.name
     return partNames;
+  }
+  
+  /*find out if a part (name) is already in the bom*/
+  isPartNameInBom( partName ){
+    var matches = this.getPartByName( partName );
+    if( matches ) return true;  
+    return false;
+  }
+  
+  /* find out if an implementation name already exists in the bom*/
+  isPartImplementationInBom( implementationName ){
+    for(var i=0;i<this.bom.length;i++)
+    {
+      var entry = this.bom[i];
+      var implemNames = Object.keys(entry.implementations).map(key => entry.implementations[key]); 
+      
+      if( implemNames.includes( implementationName ) ){
+        return true;
+      }
+    }
+    return false;
   }
   
   /*inject an empty entry */
@@ -181,13 +208,13 @@ class Bom {
     this.bom.push( bomEntry );
   }
   
-  /*assign an instance to a given entry*/
-  assignInstanceToEntry( instance ){
-  
-    var partId = instance.userData.part.partId;
-    
-    this._unRegisterInstanceFromBom( partId, instance );
-    this._registerInstanceInBom( partId, instance );
+  /*
+    (re)assign an instance to a given entry
+    //var partId = instance.userData.part.partId;
+  */
+  assignInstanceToEntry( instance, partId ){
+    this._unRegisterInstance( partId, instance );
+    this._registerInstance( partId, instance );
   }
   
   
